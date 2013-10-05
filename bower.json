@@ -1,0 +1,6 @@
+{
+  "name": "genderpromotion",
+  "dependencies": {
+    "d3": "~3.3.6"
+  }
+}
