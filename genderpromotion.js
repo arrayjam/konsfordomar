@@ -1,4 +1,4 @@
-var levels = 3,
+var levels = 5,
   subordinates = 3,
   bias = 0.51,
   randomRecruitment = true,
@@ -41,7 +41,9 @@ var link = svg.selectAll(".link")
     .data(links)
   .enter().append("path")
     .attr("class", "link")
-    .attr("d", diagonal);
+    // Smooth curveto cubic bezier
+    .attr("d", function(d) { return "M" + [d.source.x, d.source.y] + "S" + [d.source.x, d.target.y, d.target.x, d.target.y].join(","); });
+    //.attr("d", diagonal);
 
 var node = svg.selectAll(".node")
     .data(nodes)
