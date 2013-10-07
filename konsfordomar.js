@@ -1,5 +1,5 @@
 var levels = 4,
-  subordinates = 3,
+  subordinates = 2,
   bias = 0.51,
   randomRecruitment = true,
   width = 940,
@@ -59,41 +59,61 @@ function update () {
   var node = svg.selectAll(".node")
       .data(nodes);
 
+  node.transition()
+      .duration(2000)
+      .style("fill", function(d) { return (d.gender === "m") ? "steelblue" : "white"; });
+
   node.enter().append("circle");
 
-  node.attr("class", "node")
-      .attr("r", 4.5)
-      .attr("cx", function(d) { return d.x; })
-      .attr("cy", function(d) { return d.y; })
+  node.classed("empty", function(d) { return d.empty; })
       .classed("promotion", function(d) { return d.promotion; })
       .classed("removal", function(d) { return d.removal; })
+      .on("click", function(d) { console.log(d); });
+
+  node.transition()
+      .duration(2000)
+      .attr("class", "node")
+      .attr("r", 7.5)
+      .attr("cx", function(d) { return d.x; })
+      .attr("cy", function(d) { return d.y; })
       // yes yes
-      .style("fill", function(d) { return (d.gender === "m") ? "steelblue" : "pink"; });
+      .style("fill", function(d) { return (d.gender === "m") ? "steelblue" : "white"; });
   node.exit().remove();
 }
 
 function removal (nodes) {
   var id = selectRandomId(nodes);
-  var search = findNodeById(root, id);
-  var parent = search[0], node = search[1];
-  console.log(node, parent);
-  parent.children = parent.children.filter(function(d) { return d.id !== id; });
+  var node = findNodeById(root, id);
+  nodes.map(function(d) { d.removal = false; });
+  node.removal = true;
   if (node.children.length) {
-    var promoted = node.children[node.children.length * Math.random() | 0];
-    parent.children.push(promoted);
+    var toPromote = randomElement(node.children);
+    console.log("replacing", node, "with", toPromote);
+    promote(toPromote, node);
+  } else {
+    console.log("need to do some hiring");
+    node.gender = randomGender();
   }
   update();
 }
 
-//function promote (node) {
-  //if (!node.children.length)
-
-function selectRandomId (nodes) {
-  return nodes[nodes.length * Math.random() | 0].id;
+function promote (sub, current) {
+  current.gender = sub.gender;
+  if (sub.children.length) {
+    var toPromote = randomElement(sub.children);
+    promote(toPromote, sub);
+  } else {
+    sub.gender = randomGender();
+  }
 }
 
-function findNodeById (node, id, parent) {
-  if (node.id === id) return [parent, node];
+function selectRandomId (nodes) {
+  //nodes = nodes.filter(function(d) { return d.depth < 1; });
+  return randomElement(nodes).id;
+}
+
+function findNodeById (node, id) {
+  if (node.id === id) return node;
   if (node.children.length) {
     return node.children
       .map(function(d) { return findNodeById(d, id, node); })
@@ -103,6 +123,10 @@ function findNodeById (node, id, parent) {
 
 function newNode(id) {
   return {id: id, gender: randomGender()};
+}
+
+function randomElement (array) {
+  return array[array.length * Math.random() | 0];
 }
 
 
