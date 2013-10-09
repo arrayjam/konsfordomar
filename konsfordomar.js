@@ -1,10 +1,7 @@
-var levels = 4,
-  subordinates = 2,
-  bias = 0.51,
-  randomRecruitment = true,
+var levels = 3,
+  subordinates = 3,
   width = 940,
   height = 500,
-  org = {},
   id = 0;
 
 var randomGender = function () {
@@ -29,13 +26,17 @@ createLevel(root, 0);
 var tree = d3.layout.tree()
   .size([width, height - 100]);
 
-var diagonal = d3.svg.diagonal();
+var diagonal = d3.svg.diagonal()
+  // Swapsies
+  .source(function(d) { return d.target; })
+  .target(function(d) { return d.source; })
 
 var svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height)
   .append("g")
     .attr("transform", "translate(" + [0, 50] + ")");
+
 
 
 var nodes, links;
@@ -45,64 +46,60 @@ function update () {
   console.log("links", links.length);
 
   var link = svg.selectAll(".link")
-      .data(links);
-
-  link.enter().append("path");
-
-  link.attr("class", "link")
+      .data(links)
+    .enter().append("path")
+      .attr("class", "link")
       // Smooth curveto cubic bezier
       //.attr("d", function(d) { return "M" + [d.source.x, d.source.y] + "S" + [d.source.x, d.target.y, d.target.x, d.target.y].join(","); });
       .attr("d", diagonal);
 
-  link.exit().remove();
-
   var node = svg.selectAll(".node")
-      .data(nodes);
+      .data(nodes, function(d) { return d.id; });
 
-  node.transition()
-      .duration(2000)
-      .style("fill", function(d) { return (d.gender === "m") ? "steelblue" : "white"; });
+  node.enter().append("circle")
+      .attr("r", 0)
+      .transition()
+      .attr("r", 6.5);
 
-  node.enter().append("circle");
-
-  node.classed("empty", function(d) { return d.empty; })
-      .classed("promotion", function(d) { return d.promotion; })
-      .classed("removal", function(d) { return d.removal; })
-      .on("click", function(d) { console.log(d); });
-
-  node.transition()
-      .duration(2000)
+  node.attr("id", function(d) { return "node-" + d.id; })
       .attr("class", "node")
-      .attr("r", 7.5)
       .attr("cx", function(d) { return d.x; })
+      .on("click", function(d) { console.log(d); })
       .attr("cy", function(d) { return d.y; })
       // yes yes
       .style("fill", function(d) { return (d.gender === "m") ? "steelblue" : "white"; });
-  node.exit().remove();
+
 }
 
 function removal (nodes) {
   var id = selectRandomId(nodes);
   var node = findNodeById(root, id);
-  nodes.map(function(d) { d.removal = false; });
-  node.removal = true;
+  d3.select("#node-" + node.id).transition().attr("r", 0).each("end", update).remove();
   if (node.children.length) {
     var toPromote = randomElement(node.children);
-    console.log("replacing", node, "with", toPromote);
+    //console.log("replacing", node, "with", toPromote);
     promote(toPromote, node);
   } else {
-    console.log("need to do some hiring");
     node.gender = randomGender();
+    node.id = id++;
   }
-  update();
 }
 
 function promote (sub, current) {
+  //console.log(sub, current);
+  var link = tree.links([current]).filter(function(d) { return d.target.id === sub.id; })[0];
+  var path = svg.append("path").attr("class", "hidden").attr("d", diagonal(link));
+  d3.select("#node-" + sub.id).transition().duration(1000)
+    .attrTween("cx", translateXAlong(path.node()))
+    .attrTween("cy", translateYAlong(path.node()))
+    .each("end", function() { path.remove(); });
   current.gender = sub.gender;
+  console.log(sub.id, "->", current.id);
+  current.id = sub.id;
   if (sub.children.length) {
-    var toPromote = randomElement(sub.children);
-    promote(toPromote, sub);
+    promote(randomElement(sub.children), sub);
   } else {
+    sub.id = id += 1;
     sub.gender = randomGender();
   }
 }
@@ -129,6 +126,24 @@ function randomElement (array) {
   return array[array.length * Math.random() | 0];
 }
 
+// Returns an attrTween for translating along the specified path element.
+function translateXAlong(path) {
+  var l = path.getTotalLength();
+  return function() {
+    return function(t) {
+      return path.getPointAtLength(t * l).x;
+    };
+  };
+}
+
+function translateYAlong(path) {
+  var l = path.getTotalLength();
+  return function() {
+    return function(t) {
+      return path.getPointAtLength(t * l).y;
+    };
+  };
+}
 
 
 update();
