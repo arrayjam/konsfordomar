@@ -2,25 +2,30 @@ var levels = 5,
   subordinates = 2,
   width = 940,
   height = 500,
-  i = 0;
+  i = 0,
+  animating = false;
 
 var randomGender = function () { return (Math.random() > 0.5) ? "f" : "m"; };
+var visit = function (node, callback) {
+  callback(node);
+  if (node.children.length) node.children.forEach(function(node) { visit(node, callback); });
+};
 
-var ID = function (d) { return d.id; };
-
-var root = newNode();
+var root = { gender: randomGender(), id: ++i };
 
 var createLevel = function (node, level) {
   node.children = [];
   if (level + 1 >= levels) return;
   d3.range(subordinates).forEach(function() {
-    var child = newNode();
+    var child = { gender: randomGender(), id: ++i };
     node.children.push(child);
     createLevel(child, level + 1);
   });
 };
 
 createLevel(root, 0);
+
+var originalJSON = JSON.stringify(root);
 
 var tree = d3.layout.tree()
   .size([width, height - 100]);
@@ -38,7 +43,7 @@ var svg = d3.select("body").append("svg")
 
 d3.select("body").append("button")
   .text("Tick")
-  .on("click", tick);
+  .on("click", function() { if (!animating) tick() });
 
 var genderColor = d3.scale.ordinal()
   .domain(["f", "m"])
@@ -46,7 +51,9 @@ var genderColor = d3.scale.ordinal()
 
 var nodes, links;
 function update () {
+  root = JSON.parse(originalJSON);
   nodes = tree.nodes(root), links = tree.links(nodes);
+
   svg.selectAll(".link")
       .data(links)
     .enter().append("path")
@@ -58,94 +65,81 @@ function update () {
   var node = svg.selectAll(".node")
       .data(nodes, function(d) { return d.id || (d.id = ++i); });
 
-
   node.enter().append("circle")
       .attr("r", 6.5)
       .attr("class", "node")
       .attr("cx", function(d) { return d.x; })
       .on("click", function(d) { console.log(d); })
       .attr("cy", function(d) { return d.y; })
+      .attr("id", function(d) { return "node-" + d.id; })
       // yes yes
       .style("fill", function(d) { return genderColor(d.gender); });
 }
 
-function moveAll() {
-  var node = svg.selectAll(".node")
-      .data(nodes, function(d) { return d.id || (d.id = ++i); });
-
-  node.attr("id", function(d) { return "node-" + d.id; })
-      .classed("promotion", function(d) { return d.promotion; });
-
-  var promoted = nodes.filter(function(d) { return d.promotion; });
-  if (promoted.length) {
-    if (promoted[0].parent) {
-      var removal = promoted[0].parent;
-      d3.select("#node-" + removal.id).transition().attr("r", 0).remove();
-    }
-
-    promoted.forEach(function(d) {
-      move(d, d.parent);
-    });
-  }
-}
-
-function postmove () {
-  nodes = tree(root);
-  var node = svg.selectAll(".node")
-      .data(nodes, function(d) { return d.id || (d.id = ++i); });
-
-  node.attr("id", function(d) { return "node-" + d.id; })
-      .classed("promotion", function(d) { return d.promotion; });
-
-  node.exit().remove();
-  nodes.forEach(function(d) { d.promotion = false; });
-}
-
 function tick () {
   update();
-  var id = selectRandomId(nodes);
-  var node = findNodeById(root, id);
+  var id = selectRandomId(nodes, 0);
+
+  var original = JSON.parse(originalJSON);
+  console.log(original, id);
+  var node = findNodeById(original, id);
+  console.log(node);
+  animating = true;
+  fire(node);
   promoteTo(node);
-  moveAll();
+  visit(original, function(d) { d.promoted = false; });
+  console.log(original);
 }
 
 function promoteTo(node) {
   console.log("PromoteTo", node.id);
   if (node.children.length) {
-    promote(node, randomIndex(node.children));
+    promote(node, node.children.length * Math.random() | 0);
   } else {
     console.log("selected a leaf");
   }
 }
 
 function move (down, up) {
+  down = findNodeById(root, down.id);
+  up = findNodeById(root, up.id);
   var link = tree.links([up]).filter(function(d) { return d.target.id === down.id; })[0];
   var path = svg.insert("path", "circle")
     .attr("class", "link")
     .style("stroke", genderColor(down.gender))
     .attr("d", diagonal(link));
+
   d3.select("#node-" + down.id).transition().duration(1000)
     .attrTween("cx", translateXAlong(path.node()))
     .attrTween("cy", translateYAlong(path.node()))
     .each("end", function() {
       path.remove();
-      //console.log(down);
-      if (up.parent) up.parent = down.parent;
-      down.depth = up.depth;
-      up.gender = down.gender;
-      //up._children = up.children;
-      var index = up.children
-        .map(function(d, i) { return (d.id === down.id) ? i : false; })
-        .filter(function(d) { return d; })[0];
-      console.log(index);
-      //var a = up.children[index];
-      //console.log("up children index", a);
-      //var b = down.children.filter(function(d) { return d.promotion; })[0];
-      //console.log("down promotion", b);
-      ////up.children[index] = b;
-      //console.log(index);
-      postmove();
+      animating = false;
     });
+}
+
+function fire (node) {
+  d3.select("#node-" + node.id).transition().duration(1000)
+    .attr("r", 0)
+    .remove();
+}
+
+function recruit (node) {
+  node = findNodeById(root, node.id);
+
+  console.log("recruit", node);
+  svg.append("circle")
+      .datum(node)
+      .attr("r", 0)
+      .attr("class", "node")
+      .attr("cx", function(d) { return d.x; })
+      .on("click", function(d) { console.log(d); })
+      .attr("cy", function(d) { return d.y; })
+      .attr("id", function(d) { return "node-" + d.id; })
+      // yes yes
+      .style("fill", function(d) { return genderColor(d.gender); })
+    .transition().duration(1000)
+      .attr("r", 6.5);
 }
 
 // Promote up.children[index] node to up
@@ -154,18 +148,21 @@ function promote (up, index) {
   var down = up.children[index];
   down.promotion = true;
 
+  up.gender = down.gender;
+  move(down, up);
+
   if (down.children.length) {
-    promote(down, randomIndex(down.children));
+    promote(down, down.children.length * Math.random() | 0);
   } else {
     // No child elements below the one we're moving up
-    //down.children = [{gender: randomGender(), id: id++}];
+    down.gender = randomGender();
+    recruit(down);
   }
 }
 
-function selectRandomId (nodes) {
-  nodes = nodes.filter(function(d) { return d.depth === 0; });
-  var node = randomElement(nodes);
-  console.log("selected id", node.id, "depth", node.depth);
+function selectRandomId (nodes, depth) {
+  if (arguments.length > 1) nodes = nodes.filter(function(d) { return d.depth === depth; });
+  var node = nodes[nodes.length * Math.random() | 0];
   return node.id;
 }
 
@@ -176,22 +173,6 @@ function findNodeById (node, id) {
       .map(function(d) { return findNodeById(d, id, node); })
       .filter(Boolean)[0];
   }
-}
-
-function newNode() {
-  return {gender: randomGender()};
-}
-
-function randomIndex (array) {
-  var index = array.length * Math.random() | 0;
-  //console.log("random index", index);
-  return index;
-}
-
-function randomElement (array) {
-  var index = randomIndex(array);
-  //console.log("random element index", index, "id", array[index].id, "depth", array[index].depth);
-  return array[index];
 }
 
 // Returns an attrTween for translating along the specified path element.
